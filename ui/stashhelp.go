@@ -142,6 +142,15 @@ func (m stashModel) helpView() (string, int) {
 		appHelp = append(appHelp, "e", "edit")
 	}
 
+	if numDocs > 0 {
+		switch m.sortMode {
+		case sortByModified:
+			appHelp = append(appHelp, "s", "sort: modified")
+		default:
+			appHelp = append(appHelp, "s", "sort: name")
+		}
+	}
+
 	appHelp = append(appHelp, "q", "quit")
 
 	// Detailed help

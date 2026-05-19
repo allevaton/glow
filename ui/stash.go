@@ -136,6 +136,7 @@ type stashModel struct {
 	showStatusMessage  bool
 	statusMessage      statusMessage
 	statusMessageTimer *time.Timer
+	sortMode           sortMode
 
 	// Available document sections we can cycle through. We use a slice, rather
 	// than a map, because order is important.
@@ -213,7 +214,7 @@ func (m *stashModel) resetFiltering() {
 	m.filterInput.Reset()
 	m.filteredMarkdowns = nil
 
-	sortMarkdowns(m.markdowns)
+	sortMarkdowns(m.markdowns, m.sortMode)
 
 	// If the filtered section is present (it's always at the end) slice it out
 	// of the sections slice to remove it from the UI.
@@ -292,7 +293,7 @@ func (m *stashModel) addMarkdowns(mds ...*markdown) {
 
 	m.markdowns = append(m.markdowns, mds...)
 	if !m.filterApplied() {
-		sortMarkdowns(m.markdowns)
+		sortMarkdowns(m.markdowns, m.sortMode)
 	}
 
 	m.updatePagination()
@@ -575,6 +576,25 @@ func (m *stashModel) handleDocumentBrowsing(msg tea.Msg) tea.Cmd {
 			}
 
 			return openEditor(md.localPath, 0)
+
+		// Toggle sort order between name (default) and last-modified-desc.
+		case "s":
+			if m.sortMode == sortByModified {
+				m.sortMode = sortByName
+				m.statusMessage = statusMessage{normalStatusMessage, "Sorted by name"}
+			} else {
+				m.sortMode = sortByModified
+				m.statusMessage = statusMessage{normalStatusMessage, "Sorted by last modified"}
+			}
+			sortMarkdowns(m.markdowns, m.sortMode)
+			m.paginator().Page = 0
+			m.setCursor(0)
+			m.showStatusMessage = true
+			if m.statusMessageTimer != nil {
+				m.statusMessageTimer.Stop()
+			}
+			m.statusMessageTimer = time.NewTimer(statusMessageTimeout)
+			return waitForStatusMessageTimeout(stashContext, m.statusMessageTimer)
 
 		// Open document
 		case keyEnter:
