@@ -151,17 +151,22 @@ func sourceFromArg(arg string) (*source, error) {
 }
 
 // validateStyle checks if the style is a default style, if not, checks that
-// the custom style exists.
-func validateStyle(style string) error {
-	if style != "auto" && styles.DefaultStyles[style] == nil {
-		style = utils.ExpandPath(style)
-		if _, err := os.Stat(style); errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("specified style does not exist: %s", style)
-		} else if err != nil {
-			return fmt.Errorf("unable to stat file: %w", err)
-		}
+// the custom style exists. If the custom style file is missing, it logs the
+// error and falls back to the default auto style.
+func validateStyle(style string) (string, error) {
+	if style == "auto" || styles.DefaultStyles[style] != nil {
+		return style, nil
 	}
-	return nil
+	expanded := utils.ExpandPath(style)
+	_, err := os.Stat(expanded)
+	if errors.Is(err, fs.ErrNotExist) {
+		fmt.Fprintf(os.Stderr, "specified style does not exist: %s; falling back to %q\n", expanded, styles.AutoStyle)
+		return styles.AutoStyle, nil
+	}
+	if err != nil {
+		return style, fmt.Errorf("unable to stat file: %w", err)
+	}
+	return style, nil
 }
 
 func validateOptions(cmd *cobra.Command) error {
@@ -179,10 +184,11 @@ func validateOptions(cmd *cobra.Command) error {
 	}
 
 	// validate the glamour style
-	style = viper.GetString("style")
-	if err := validateStyle(style); err != nil {
+	resolvedStyle, err := validateStyle(viper.GetString("style"))
+	if err != nil {
 		return err
 	}
+	style = resolvedStyle
 
 	isTerminal := term.IsTerminal(int(os.Stdout.Fd()))
 	// We want to use a special no-TTY style, when stdout is not a terminal
@@ -354,8 +360,10 @@ func runTUI(path string, content string) error {
 	}
 
 	// use style set in env, or auto if unset
-	if err := validateStyle(cfg.GlamourStyle); err != nil {
+	if resolved, err := validateStyle(cfg.GlamourStyle); err != nil {
 		cfg.GlamourStyle = style
+	} else {
+		cfg.GlamourStyle = resolved
 	}
 
 	cfg.Path = path
