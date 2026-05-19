@@ -36,7 +36,7 @@ func NewProgram(cfg Config, content string) (*tea.Program, func()) {
 
 	if utils.TextSizingEnabled() {
 		if tty, state, err := openRawTerminal(); err == nil {
-			painter := newRawPainter(os.Stdout, tty, state, cfg.EnableMouse)
+			painter := newRawPainter(os.Stdout, tty, state, true)
 			prog := tea.NewProgram(
 				paintModel{inner: m, painter: painter},
 				tea.WithoutRenderer(),
@@ -331,9 +331,8 @@ func (m model) View() tea.View {
 
 	v := tea.NewView(content)
 	v.AltScreen = true
-	if m.common.cfg.EnableMouse {
-		v.MouseMode = tea.MouseModeCellMotion
-	}
+	// Mouse is always on so the stash list takes clicks and wheel scroll; --mouse is a no-op.
+	v.MouseMode = tea.MouseModeCellMotion
 	return v
 }
 
