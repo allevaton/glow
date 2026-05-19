@@ -40,10 +40,11 @@ func NewProgram(cfg Config, content string) *tea.Program {
 	)
 
 	config = cfg
-	opts := []tea.ProgramOption{tea.WithAltScreen()}
-	if cfg.EnableMouse {
-		opts = append(opts, tea.WithMouseCellMotion())
-	}
+	// Mouse support is always on in TUI mode so the file list can be
+	// driven by clicks and the scroll wheel. The legacy --mouse flag /
+	// `mouse:` config option is now a no-op.
+	opts := []tea.ProgramOption{tea.WithAltScreen(), tea.WithMouseCellMotion()}
+	_ = cfg.EnableMouse
 	m := newModel(cfg, content)
 	return tea.NewProgram(m, opts...)
 }

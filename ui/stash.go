@@ -25,6 +25,7 @@ const (
 	stashViewTopPadding        = 5 // logo, status bar, gaps
 	stashViewBottomPadding     = 3 // pagination and gaps, but not help
 	stashViewHorizontalPadding = 6
+	doubleClickWindow          = 500 * time.Millisecond
 )
 
 var stashingStatusMessage = statusMessage{normalStatusMessage, "Stashing..."}
@@ -171,6 +172,10 @@ type stashModel struct {
 	// than we can display at a time so we can paginate locally without having
 	// to fetch every time.
 	serverPage int64
+
+	// Double-click tracking for mouse interaction on the file list.
+	lastClickTime  time.Time
+	lastClickIndex int
 }
 
 func (m stashModel) loadingDone() bool {
@@ -457,6 +462,27 @@ func (m stashModel) update(msg tea.Msg) (stashModel, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// itemIndexAt returns the on-page item index under the given screen Y
+// coordinate, or -1 if Y falls in a gap or outside the list.
+func (m *stashModel) itemIndexAt(y int) int {
+	rel := y - stashViewTopPadding
+	if rel < 0 {
+		return -1
+	}
+	idx := rel / stashViewItemHeight
+	row := rel % stashViewItemHeight
+	// Each item occupies two visible rows (title + date) followed by a gap.
+	// Treat clicks on the gap row as not on any item.
+	if row == stashViewItemHeight-1 {
+		return -1
+	}
+	itemsOnPage := m.paginator().ItemsOnPage(len(m.getVisibleMarkdowns()))
+	if idx >= itemsOnPage {
+		return -1
+	}
+	return idx
+}
+
 // Updates for when a user is browsing the markdown listing.
 func (m *stashModel) handleDocumentBrowsing(msg tea.Msg) tea.Cmd {
 	var cmds []tea.Cmd
@@ -464,6 +490,44 @@ func (m *stashModel) handleDocumentBrowsing(msg tea.Msg) tea.Cmd {
 	numDocs := len(m.getVisibleMarkdowns())
 
 	switch msg := msg.(type) {
+	// Handle mouse clicks and wheel events.
+	case tea.MouseMsg:
+		switch msg.Button {
+		case tea.MouseButtonWheelUp:
+			if msg.Action == tea.MouseActionPress {
+				m.moveCursorUp()
+			}
+		case tea.MouseButtonWheelDown:
+			if msg.Action == tea.MouseActionPress {
+				m.moveCursorDown()
+			}
+		case tea.MouseButtonLeft:
+			if msg.Action != tea.MouseActionPress {
+				break
+			}
+			idx := m.itemIndexAt(msg.Y)
+			if idx < 0 {
+				break
+			}
+			now := time.Now()
+			isDoubleClick := idx == m.cursor() &&
+				idx == m.lastClickIndex &&
+				now.Sub(m.lastClickTime) <= doubleClickWindow
+			m.setCursor(idx)
+			if isDoubleClick {
+				m.hideStatusMessage()
+				if md := m.selectedMarkdown(); md != nil {
+					cmds = append(cmds, m.openMarkdown(md))
+				}
+				// Reset so a third click doesn't immediately re-open.
+				m.lastClickTime = time.Time{}
+				m.lastClickIndex = -1
+			} else {
+				m.lastClickTime = now
+				m.lastClickIndex = idx
+			}
+		}
+
 	// Handle keys
 	case tea.KeyMsg:
 		switch msg.String() {
