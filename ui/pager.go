@@ -59,6 +59,9 @@ type pagerModel struct {
 func newPagerModel(common *commonModel) pagerModel {
 	// Init viewport
 	vp := viewport.New()
+	// Scroll one line per wheel tick so the feel matches pagers like moor;
+	// the bubbles default of 3 jumps the page noticeably on each notch.
+	vp.MouseWheelDelta = 1
 
 	m := pagerModel{
 		common:   common,
