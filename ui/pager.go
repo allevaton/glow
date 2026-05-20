@@ -110,6 +110,9 @@ func newPagerModel(common *commonModel) pagerModel {
 	vp := viewport.New(0, 0)
 	vp.YPosition = 0
 	vp.HighPerformanceRendering = config.HighPerformancePager
+	// Scroll one line per wheel tick so the feel matches pagers like moor;
+	// the bubbles default of 3 jumps the page noticeably on each notch.
+	vp.MouseWheelDelta = 1
 
 	m := pagerModel{
 		common:   common,
