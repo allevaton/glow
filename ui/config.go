@@ -1,5 +1,7 @@
 package ui
 
+import "time"
+
 // Config contains TUI-specific configuration.
 type Config struct {
 	ShowAllFiles     bool
@@ -13,6 +15,8 @@ type Config struct {
 
 	// Working directory or file path
 	Path string
+
+	RefreshInterval time.Duration
 
 	// For debugging the UI
 	GlamourEnabled bool `env:"GLOW_ENABLE_GLAMOUR" envDefault:"true"`
