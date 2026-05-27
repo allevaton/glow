@@ -66,6 +66,18 @@ type (
 	statusMessageTimeoutMsg applicationContext
 )
 
+type (
+	// rescanTickMsg is emitted by scheduleRescan when it's time to consider
+	// running another rescan.
+	rescanTickMsg struct{}
+
+	// rescanFinishedMsg carries the result of a periodic rescan: the full
+	// set of file paths currently visible to gitcha.
+	rescanFinishedMsg struct {
+		paths []string
+	}
+)
+
 // applicationContext indicates the area of the application something applies
 // to. Occasionally used as an argument to commands and messages.
 type applicationContext int
@@ -110,6 +122,12 @@ type model struct {
 	// Channel that receives paths to local markdown files
 	// (via the github.com/muesli/gitcha package)
 	localFileFinder chan gitcha.SearchResult
+
+	// autoRefreshStarted is set to true after the first auto-refresh tick
+	// chain is scheduled. This prevents leaking additional concurrent tick
+	// chains when the user presses F (manual refresh), which resets
+	// m.stash.loaded and goes through the same localFileSearchFinished path.
+	autoRefreshStarted bool
 }
 
 // unloadDocument unloads a document from the pager. Note that while this
@@ -288,7 +306,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the stash.
 		stashModel, cmd := m.stash.update(msg)
 		m.stash = stashModel
-		return m, cmd
+		cmds = append(cmds, cmd)
+		// Schedule the auto-refresh tick chain exactly once. We cannot gate
+		// on m.stash.loaded because the F key resets loaded=false before
+		// re-running findLocalFiles, so every F press would also arrive here
+		// with loaded=false and schedule a second chain.
+		if !m.autoRefreshStarted && m.common.cfg.RefreshInterval > 0 {
+			m.autoRefreshStarted = true
+			cmds = append(cmds, scheduleRescan(m.common.cfg.RefreshInterval))
+		}
+		return m, tea.Batch(cmds...)
 
 	case foundLocalFileMsg:
 		newMd := localFileToMarkdown(m.common.cwd, gitcha.SearchResult(msg))
@@ -306,6 +333,43 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			newStashModel, cmd := m.stash.update(msg)
 			m.stash = newStashModel
 			cmds = append(cmds, cmd)
+		}
+
+	case rescanTickMsg:
+		if m.common.cfg.RefreshInterval <= 0 {
+			break
+		}
+		// Skip this tick if we shouldn't rescan right now; re-arm.
+		if m.state != stateShowStash {
+			cmds = append(cmds, scheduleRescan(m.common.cfg.RefreshInterval))
+			break
+		}
+		if m.stash.rescanInFlight {
+			cmds = append(cmds, scheduleRescan(m.common.cfg.RefreshInterval))
+			break
+		}
+		if m.stash.viewState != stashStateReady {
+			cmds = append(cmds, scheduleRescan(m.common.cfg.RefreshInterval))
+			break
+		}
+		if m.stash.filterState == filtering {
+			cmds = append(cmds, scheduleRescan(m.common.cfg.RefreshInterval))
+			break
+		}
+		m.stash.rescanInFlight = true
+		cmds = append(cmds, rescanLocalFiles(*m.common))
+
+	case rescanFinishedMsg:
+		m.stash.rescanInFlight = false
+		cwd := m.common.cwd
+		m.stash.applyRescan(msg.paths, func(p string) *markdown {
+			return pathToMarkdown(cwd, p)
+		})
+		if m.stash.filterApplied() {
+			cmds = append(cmds, filterMarkdowns(m.stash))
+		}
+		if m.common.cfg.RefreshInterval > 0 {
+			cmds = append(cmds, scheduleRescan(m.common.cfg.RefreshInterval))
 		}
 	}
 
@@ -412,6 +476,57 @@ func findNextLocalFile(m model) tea.Cmd {
 	}
 }
 
+// rescanLocalFiles runs the same gitcha walk as findLocalFiles but drains
+// the result channel synchronously into a single rescanFinishedMsg so the
+// stash can apply the diff atomically.
+func rescanLocalFiles(m commonModel) tea.Cmd {
+	return func() tea.Msg {
+		var (
+			cwd = m.cfg.Path
+			err error
+		)
+
+		if cwd == "" {
+			cwd, err = os.Getwd()
+		} else {
+			var info os.FileInfo
+			info, err = os.Stat(cwd)
+			if err == nil && info.IsDir() {
+				cwd, err = filepath.Abs(cwd)
+			}
+		}
+		if err != nil {
+			log.Debug("rescanLocalFiles: cwd resolve failed", "error", err)
+			return rescanFinishedMsg{paths: nil}
+		}
+
+		var ch chan gitcha.SearchResult
+		if m.cfg.ShowAllFiles {
+			ch, err = gitcha.FindAllFilesExcept(cwd, markdownExtensions, nil)
+		} else {
+			ch, err = gitcha.FindFilesExcept(cwd, markdownExtensions, ignorePatterns(m))
+		}
+		if err != nil {
+			log.Debug("rescanLocalFiles: gitcha failed", "error", err)
+			return rescanFinishedMsg{paths: nil}
+		}
+
+		var paths []string
+		for res := range ch {
+			paths = append(paths, res.Path)
+		}
+		return rescanFinishedMsg{paths: paths}
+	}
+}
+
+// scheduleRescan returns a command that fires a rescanTickMsg after d.
+// Callers should not call this with d <= 0; check the interval first.
+func scheduleRescan(d time.Duration) tea.Cmd {
+	return tea.Tick(d, func(time.Time) tea.Msg {
+		return rescanTickMsg{}
+	})
+}
+
 func waitForStatusMessageTimeout(appCtx applicationContext, t *time.Timer) tea.Cmd {
 	return func() tea.Msg {
 		<-t.C
@@ -429,6 +544,21 @@ func localFileToMarkdown(cwd string, res gitcha.SearchResult) *markdown {
 		localPath: res.Path,
 		Note:      stripAbsolutePath(res.Path, cwd),
 		Modtime:   res.Info.ModTime(),
+	}
+}
+
+// pathToMarkdown builds a *markdown for a path discovered by a rescan,
+// statting the file for its modtime. Returns nil if the file can no longer
+// be stat'd (it may have been deleted between the walk and now).
+func pathToMarkdown(cwd, path string) *markdown {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil
+	}
+	return &markdown{
+		localPath: path,
+		Note:      stripAbsolutePath(path, cwd),
+		Modtime:   info.ModTime(),
 	}
 }
 

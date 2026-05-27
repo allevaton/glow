@@ -177,6 +177,10 @@ type stashModel struct {
 	// Double-click tracking for mouse interaction on the file list.
 	lastClickTime  time.Time
 	lastClickIndex int
+
+	// rescanInFlight is true when a periodic rescan command is running.
+	// Prevents overlapping rescans.
+	rescanInFlight bool
 }
 
 func (m stashModel) loadingDone() bool {
@@ -375,6 +379,98 @@ func (m *stashModel) moveCursorDown() {
 		return
 	}
 	m.setCursor(itemsOnPage - 1)
+}
+
+// markdownFactory builds a *markdown for a given path. Injected so tests
+// can avoid touching disk.
+type markdownFactory func(path string) *markdown
+
+// applyRescan reconciles m.markdowns against a fresh set of paths from a
+// directory rescan. Adds new entries via mkMarkdown, removes entries whose
+// paths are no longer present, preserves cursor selection where possible,
+// and re-sorts (unless a filter is active).
+func (m *stashModel) applyRescan(paths []string, mkMarkdown markdownFactory) {
+	// Remember which document was selected so we can restore the cursor.
+	var selectedPath string
+	if md := m.selectedMarkdown(); md != nil {
+		selectedPath = md.localPath
+	}
+
+	incoming := make(map[string]struct{}, len(paths))
+	for _, p := range paths {
+		incoming[p] = struct{}{}
+	}
+
+	existing := make(map[string]*markdown, len(m.markdowns))
+	for _, md := range m.markdowns {
+		existing[md.localPath] = md
+	}
+
+	// Additions.
+	for _, p := range paths {
+		if _, ok := existing[p]; ok {
+			continue
+		}
+		md := mkMarkdown(p)
+		if md == nil {
+			continue
+		}
+		if m.filterApplied() {
+			md.buildFilterValue()
+		}
+		m.markdowns = append(m.markdowns, md)
+	}
+
+	// Removals.
+	m.markdowns = filterMarkdownsByPath(m.markdowns, incoming)
+	if m.filterApplied() {
+		m.filteredMarkdowns = filterMarkdownsByPath(m.filteredMarkdowns, incoming)
+	}
+
+	if !m.filterApplied() {
+		sortMarkdowns(m.markdowns, m.sortMode)
+	}
+
+	m.updatePagination()
+	m.restoreCursor(selectedPath)
+}
+
+// restoreCursor moves page/cursor to the entry with the given localPath in
+// the current visible list. If no such entry exists, the cursor is clamped
+// to the number of items currently on the page.
+func (m *stashModel) restoreCursor(selectedPath string) {
+	mds := m.getVisibleMarkdowns()
+
+	if selectedPath != "" {
+		for i, md := range mds {
+			if md.localPath != selectedPath {
+				continue
+			}
+			perPage := m.paginator().PerPage
+			m.paginator().Page = i / perPage
+			m.setCursor(i % perPage)
+			return
+		}
+	}
+
+	// Selected path is gone (or there was no selection): clamp the cursor
+	// to the items on the current page.
+	itemsOnPage := m.paginator().ItemsOnPage(len(mds))
+	if m.cursor() > itemsOnPage-1 {
+		m.setCursor(max(0, itemsOnPage-1))
+	}
+}
+
+// filterMarkdownsByPath returns a new slice containing only entries whose
+// localPath is present in keep.
+func filterMarkdownsByPath(in []*markdown, keep map[string]struct{}) []*markdown {
+	out := make([]*markdown, 0, len(in))
+	for _, md := range in {
+		if _, ok := keep[md.localPath]; ok {
+			out = append(out, md)
+		}
+	}
+	return out
 }
 
 // INIT

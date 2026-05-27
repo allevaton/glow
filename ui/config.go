@@ -1,5 +1,7 @@
 package ui
 
+import "time"
+
 // Config contains TUI-specific configuration.
 type Config struct {
 	ShowAllFiles     bool
@@ -13,6 +15,8 @@ type Config struct {
 
 	// Working directory or file path
 	Path string
+
+	RefreshInterval time.Duration
 
 	// For debugging the UI
 	HighPerformancePager bool `env:"GLOW_HIGH_PERFORMANCE_PAGER" envDefault:"true"`
