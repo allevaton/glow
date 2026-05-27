@@ -213,6 +213,8 @@ all: false
 showLineNumbers: false
 # preserve newlines in the output
 preserveNewLines: false
+# default sort order for the file list: "name" or "modified" (TUI-mode only)
+sort: "name"
 ```
 
 ## Contributing
