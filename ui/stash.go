@@ -340,6 +340,26 @@ func (m *stashModel) hideStatusMessage() {
 	}
 }
 
+// showStatusMessageFor displays an ephemeral status note and arms the timer
+// that hides it again after statusMessageTimeout.
+func (m *stashModel) showStatusMessageFor(msg statusMessage) tea.Cmd {
+	m.statusMessage = msg
+	m.showStatusMessage = true
+	if m.statusMessageTimer != nil {
+		m.statusMessageTimer.Stop()
+	}
+	m.statusMessageTimer = time.NewTimer(statusMessageTimeout)
+	return waitForStatusMessageTimeout(stashContext, m.statusMessageTimer)
+}
+
+// sortStatusText returns the status note describing the current sort order.
+func sortStatusText(mode sortMode) string {
+	if mode == sortByModified {
+		return "Sorted by last modified"
+	}
+	return "Sorted by name"
+}
+
 func (m *stashModel) moveCursorUp() {
 	m.setCursor(m.cursor() - 1)
 	if m.cursor() < 0 && m.paginator().Page == 0 {
@@ -498,6 +518,15 @@ func newStashModel(common *commonModel) stashModel {
 		sections:    s,
 	}
 
+	if mode, err := parseSortMode(common.cfg.DefaultSort); err != nil {
+		if common.cfg.DefaultSort != "" {
+			log.Warn("invalid sort mode in config, defaulting to name", "value", common.cfg.DefaultSort, "error", err)
+		}
+		m.sortMode = sortByName
+	} else {
+		m.sortMode = mode
+	}
+
 	return m
 }
 
@@ -520,7 +549,13 @@ func (m stashModel) update(msg tea.Msg) (stashModel, tea.Cmd) {
 
 	case localFileSearchFinished:
 		// We're finished searching for local files
+		alreadyLoaded := m.loaded
 		m.loaded = true
+		// On the first load, surface a non-default sort order so it's clear the
+		// list isn't alphabetical. It auto-hides like any other status note.
+		if !alreadyLoaded && m.sortMode != sortByName {
+			cmds = append(cmds, m.showStatusMessageFor(statusMessage{normalStatusMessage, sortStatusText(m.sortMode)}))
+		}
 
 	case filteredMarkdownMsg:
 		m.filteredMarkdowns = msg
@@ -691,20 +726,13 @@ func (m *stashModel) handleDocumentBrowsing(msg tea.Msg) tea.Cmd {
 		case "s":
 			if m.sortMode == sortByModified {
 				m.sortMode = sortByName
-				m.statusMessage = statusMessage{normalStatusMessage, "Sorted by name"}
 			} else {
 				m.sortMode = sortByModified
-				m.statusMessage = statusMessage{normalStatusMessage, "Sorted by last modified"}
 			}
 			sortMarkdowns(m.markdowns, m.sortMode)
 			m.paginator().Page = 0
 			m.setCursor(0)
-			m.showStatusMessage = true
-			if m.statusMessageTimer != nil {
-				m.statusMessageTimer.Stop()
-			}
-			m.statusMessageTimer = time.NewTimer(statusMessageTimeout)
-			return waitForStatusMessageTimeout(stashContext, m.statusMessageTimer)
+			return m.showStatusMessageFor(statusMessage{normalStatusMessage, sortStatusText(m.sortMode)})
 
 		// Open document
 		case keyEnter:

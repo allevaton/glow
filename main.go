@@ -46,6 +46,7 @@ var (
 	preserveNewLines bool
 	mouse            bool
 	refreshInterval  time.Duration
+	sortFlag         string
 
 	rootCmd = &cobra.Command{
 		Use:   "glow [SOURCE|DIR]",
@@ -181,6 +182,7 @@ func validateOptions(cmd *cobra.Command) error {
 	preserveNewLines = viper.GetBool("preserveNewLines")
 	showLineNumbers = viper.GetBool("showLineNumbers")
 	refreshInterval = viper.GetDuration("refreshInterval")
+	sortFlag = viper.GetString("sort")
 
 	if pager && tui {
 		return errors.New("cannot use both pager and tui")
@@ -376,6 +378,7 @@ func runTUI(path string, content string) error {
 	cfg.EnableMouse = mouse
 	cfg.PreserveNewLines = preserveNewLines
 	cfg.RefreshInterval = refreshInterval
+	cfg.DefaultSort = sortFlag
 
 	// Run Bubble Tea program
 	if _, err := ui.NewProgram(cfg, content).Run(); err != nil {
@@ -422,6 +425,7 @@ func init() {
 	rootCmd.Flags().BoolVarP(&mouse, "mouse", "m", false, "enable mouse wheel (TUI-mode only)")
 	_ = rootCmd.Flags().MarkHidden("mouse")
 	rootCmd.Flags().DurationVar(&refreshInterval, "refresh-interval", 5*time.Second, "interval for auto-refreshing the file list (TUI-mode only, 0 disables)")
+	rootCmd.Flags().StringVar(&sortFlag, "sort", "name", "default sort order for the file list: name or modified (TUI-mode only)")
 
 	// Config bindings
 	_ = viper.BindPFlag("pager", rootCmd.Flags().Lookup("pager"))
@@ -434,10 +438,12 @@ func init() {
 	_ = viper.BindPFlag("showLineNumbers", rootCmd.Flags().Lookup("line-numbers"))
 	_ = viper.BindPFlag("all", rootCmd.Flags().Lookup("all"))
 	_ = viper.BindPFlag("refreshInterval", rootCmd.Flags().Lookup("refresh-interval"))
+	_ = viper.BindPFlag("sort", rootCmd.Flags().Lookup("sort"))
 
 	viper.SetDefault("style", styles.AutoStyle)
 	viper.SetDefault("width", 0)
 	viper.SetDefault("all", true)
+	viper.SetDefault("sort", "name")
 
 	rootCmd.AddCommand(configCmd, manCmd)
 }
