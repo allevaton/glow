@@ -7,7 +7,7 @@
 #   4. Rebase the current branch onto $main_branch
 #
 # Run from any branch you want rebased (typically `local`).
-# This script is gitignored — it's a personal workflow helper.
+# This script lives on the fork's `local` branch — a personal workflow helper.
 
 set -e
 
