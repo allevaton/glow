@@ -279,6 +279,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
+	// The mouse back button mirrors esc: return to the file list when viewing
+	// (or still loading) a document. Gated on press so the press/release pair
+	// doesn't fire twice.
+	case tea.MouseMsg:
+		if msg.Button == tea.MouseButtonBackward && msg.Action == tea.MouseActionPress {
+			if m.state == stateShowDocument || m.stash.viewState == stashStateLoadingDocument {
+				return m, tea.Batch(m.unloadDocument()...)
+			}
+		}
+
 	// Window size is received when starting up and on every resize
 	case tea.WindowSizeMsg:
 		m.common.width = msg.Width
