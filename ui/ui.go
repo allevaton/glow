@@ -192,7 +192,7 @@ func newModel(cfg Config, content string) tea.Model {
 			m.fatalErr = err
 			return m
 		}
-		m.pager.currentDocument.Body = string(utils.RemoveFrontmatter(content))
+		m.pager.currentDocument.Body = string(content)
 	}
 
 	return m
@@ -296,8 +296,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case fetchedMarkdownMsg:
 		// We've loaded a markdown file's contents for rendering
 		m.pager.currentDocument = *msg
-		body := string(utils.RemoveFrontmatter([]byte(msg.Body)))
-		cmds = append(cmds, renderWithGlamour(m.pager, body))
+		cmds = append(cmds, renderWithGlamour(m.pager, msg.Body))
 
 	case contentRenderedMsg:
 		m.state = stateShowDocument

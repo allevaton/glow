@@ -44,6 +44,7 @@ var (
 	showLineNumbers  bool
 	preserveNewLines bool
 	mouse            bool
+	frontmatter      bool
 	refreshInterval  time.Duration
 	sortFlag         string
 
@@ -180,6 +181,7 @@ func validateOptions(cmd *cobra.Command) error {
 	showAllFiles = viper.GetBool("all")
 	preserveNewLines = viper.GetBool("preserveNewLines")
 	showLineNumbers = viper.GetBool("showLineNumbers")
+	frontmatter = viper.GetBool("frontmatter")
 	refreshInterval = viper.GetDuration("refreshInterval")
 	sortFlag = viper.GetString("sort")
 
@@ -288,8 +290,6 @@ func executeCLI(cmd *cobra.Command, src *source, w io.Writer) error {
 		return fmt.Errorf("unable to read from reader: %w", err)
 	}
 
-	b = utils.RemoveFrontmatter(b)
-
 	// render
 	var baseURL string
 	u, err := url.ParseRequestURI(src.URL)
@@ -301,23 +301,29 @@ func executeCLI(cmd *cobra.Command, src *source, w io.Writer) error {
 	isCode := !utils.IsMarkdownFile(src.URL)
 
 	// initialize glamour
-	r, err := glamour.NewTermRenderer(
+	options := []glamour.TermRendererOption{
 		utils.GlamourStyle(style, isCode),
 		glamour.WithWordWrap(int(width)), //nolint:gosec
 		glamour.WithBaseURL(baseURL),
 		glamour.WithPreservedNewLines(),
-	)
-	if err != nil {
-		return fmt.Errorf("unable to create renderer: %w", err)
 	}
 
-	content := string(b)
 	ext := filepath.Ext(src.URL)
-	if isCode {
-		content = utils.WrapCodeBlock(string(b), ext)
-	}
 
-	out, err := r.Render(content)
+	var out string
+	if !isCode && frontmatter {
+		out, err = utils.RenderWithFrontmatter(b, options)
+	} else {
+		r, rerr := glamour.NewTermRenderer(options...)
+		if rerr != nil {
+			return fmt.Errorf("unable to create renderer: %w", rerr)
+		}
+		if isCode {
+			out, err = r.Render(utils.WrapCodeBlock(string(b), ext))
+		} else {
+			out, err = r.Render(string(utils.RemoveFrontmatter(b)))
+		}
+	}
 	if err != nil {
 		return fmt.Errorf("unable to render markdown: %w", err)
 	}
@@ -348,7 +354,7 @@ func executeCLI(cmd *cobra.Command, src *source, w io.Writer) error {
 		if !isURL(src.URL) {
 			path = src.URL
 		}
-		return runTUI(path, content)
+		return runTUI(path, string(b))
 	default:
 		if _, err = fmt.Fprint(w, out); err != nil {
 			return fmt.Errorf("unable to write to writer: %w", err)
@@ -380,6 +386,7 @@ func runTUI(path string, content string) error {
 	cfg.GlamourMaxWidth = width
 	cfg.EnableMouse = mouse
 	cfg.PreserveNewLines = preserveNewLines
+	cfg.ShowFrontmatter = frontmatter
 	cfg.RefreshInterval = refreshInterval
 	cfg.DefaultSort = sortFlag
 
@@ -429,6 +436,7 @@ func init() {
 	rootCmd.Flags().BoolVarP(&preserveNewLines, "preserve-new-lines", "n", false, "preserve newlines in the output")
 	rootCmd.Flags().BoolVarP(&mouse, "mouse", "m", false, "enable mouse wheel (TUI-mode only)")
 	_ = rootCmd.Flags().MarkHidden("mouse")
+	rootCmd.Flags().BoolVar(&frontmatter, "frontmatter", true, "render frontmatter as a table")
 	rootCmd.Flags().DurationVar(&refreshInterval, "refresh-interval", 5*time.Second, "interval for auto-refreshing the file list (TUI-mode only, 0 disables)")
 	rootCmd.Flags().StringVar(&sortFlag, "sort", "name", "default sort order for the file list: name or modified (TUI-mode only)")
 
@@ -442,6 +450,7 @@ func init() {
 	_ = viper.BindPFlag("preserveNewLines", rootCmd.Flags().Lookup("preserve-new-lines"))
 	_ = viper.BindPFlag("showLineNumbers", rootCmd.Flags().Lookup("line-numbers"))
 	_ = viper.BindPFlag("all", rootCmd.Flags().Lookup("all"))
+	_ = viper.BindPFlag("frontmatter", rootCmd.Flags().Lookup("frontmatter"))
 	_ = viper.BindPFlag("refreshInterval", rootCmd.Flags().Lookup("refresh-interval"))
 	_ = viper.BindPFlag("sort", rootCmd.Flags().Lookup("sort"))
 
