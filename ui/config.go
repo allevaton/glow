@@ -12,6 +12,7 @@ type Config struct {
 	GlamourStyle     string `env:"GLAMOUR_STYLE"`
 	EnableMouse      bool
 	PreserveNewLines bool
+	ShowFrontmatter  bool
 	DefaultSort      string
 
 	// Working directory or file path

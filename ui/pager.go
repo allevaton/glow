@@ -443,22 +443,29 @@ func glamourRender(m pagerModel, markdown string) (string, error) {
 	if m.common.cfg.PreserveNewLines {
 		options = append(options, glamour.WithPreservedNewLines())
 	}
-	r, err := glamour.NewTermRenderer(options...)
-	if err != nil {
-		return "", fmt.Errorf("error creating glamour renderer: %w", err)
-	}
 
-	if isCode {
-		markdown = utils.WrapCodeBlock(markdown, filepath.Ext(m.currentDocument.Note))
+	var (
+		out string
+		err error
+	)
+	if !isCode && m.common.cfg.ShowFrontmatter {
+		out, err = utils.RenderWithFrontmatter([]byte(markdown), options)
+	} else {
+		r, rerr := glamour.NewTermRenderer(options...)
+		if rerr != nil {
+			return "", fmt.Errorf("error creating glamour renderer: %w", rerr)
+		}
+		if isCode {
+			out, err = r.Render(utils.WrapCodeBlock(markdown, filepath.Ext(m.currentDocument.Note)))
+			if err == nil {
+				out = strings.TrimSpace(out)
+			}
+		} else {
+			out, err = r.Render(string(utils.RemoveFrontmatter([]byte(markdown))))
+		}
 	}
-
-	out, err := r.Render(markdown)
 	if err != nil {
 		return "", fmt.Errorf("error rendering markdown: %w", err)
-	}
-
-	if isCode {
-		out = strings.TrimSpace(out)
 	}
 
 	// trim lines

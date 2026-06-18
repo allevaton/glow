@@ -10,7 +10,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour/styles"
-	"github.com/charmbracelet/glow/v2/utils"
 	"github.com/charmbracelet/log"
 	"github.com/muesli/gitcha"
 	te "github.com/muesli/termenv"
@@ -214,8 +213,7 @@ func (m model) Init() tea.Cmd {
 			log.Error("unable to read file", "file", m.common.cfg.Path, "error", err)
 			return func() tea.Msg { return errMsg{err} }
 		}
-		body := string(utils.RemoveFrontmatter(content))
-		cmds = append(cmds, renderWithGlamour(m.pager, body))
+		cmds = append(cmds, renderWithGlamour(m.pager, string(content)))
 	}
 
 	return tea.Batch(cmds...)
@@ -304,8 +302,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case fetchedMarkdownMsg:
 		// We've loaded a markdown file's contents for rendering
 		m.pager.currentDocument = *msg
-		body := string(utils.RemoveFrontmatter([]byte(msg.Body)))
-		cmds = append(cmds, renderWithGlamour(m.pager, body))
+		cmds = append(cmds, renderWithGlamour(m.pager, msg.Body))
 
 	case contentRenderedMsg:
 		m.state = stateShowDocument
