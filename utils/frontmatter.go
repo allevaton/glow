@@ -78,12 +78,11 @@ func flattenMapping(prefix string, node *yaml.Node) []fmEntry {
 	for i := 0; i+1 < len(node.Content); i += 2 {
 		key := joinKey(prefix, node.Content[i].Value)
 		val := node.Content[i+1]
-		switch val.Kind {
-		case yaml.MappingNode:
+		if val.Kind == yaml.MappingNode {
 			entries = append(entries, flattenMapping(key, val)...)
-		default:
-			entries = append(entries, fmEntry{key: sanitizeCell(key), value: sanitizeCell(inlineNode(val))})
+			continue
 		}
+		entries = append(entries, fmEntry{key: sanitizeCell(key), value: sanitizeCell(inlineNode(val))})
 	}
 	return entries
 }
@@ -98,7 +97,7 @@ func joinKey(prefix, key string) string {
 // inlineNode renders any node onto a single line: scalars verbatim, sequences
 // comma-joined, and (nested-in-a-sequence) mappings as "k: v" pairs.
 func inlineNode(node *yaml.Node) string {
-	switch node.Kind {
+	switch node.Kind { //nolint:exhaustive // every other kind renders its scalar Value
 	case yaml.SequenceNode:
 		parts := make([]string, 0, len(node.Content))
 		for _, item := range node.Content {

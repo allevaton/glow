@@ -380,21 +380,14 @@ func glamourRender(m pagerModel, markdown string) (string, error) {
 		out string
 		err error
 	)
-	if !isCode && m.common.cfg.ShowFrontmatter {
+	switch {
+	case isCode:
+		out, err = renderOnce(options, utils.WrapCodeBlock(markdown, filepath.Ext(m.currentDocument.Note)))
+		out = strings.TrimSpace(out)
+	case m.common.cfg.ShowFrontmatter:
 		out, err = utils.RenderWithFrontmatter([]byte(markdown), options)
-	} else {
-		r, rerr := glamour.NewTermRenderer(options...)
-		if rerr != nil {
-			return "", fmt.Errorf("error creating glamour renderer: %w", rerr)
-		}
-		if isCode {
-			out, err = r.Render(utils.WrapCodeBlock(markdown, filepath.Ext(m.currentDocument.Note)))
-			if err == nil {
-				out = strings.TrimSpace(out)
-			}
-		} else {
-			out, err = r.Render(string(utils.RemoveFrontmatter([]byte(markdown))))
-		}
+	default:
+		out, err = renderOnce(options, string(utils.RemoveFrontmatter([]byte(markdown))))
 	}
 	if err != nil {
 		return "", fmt.Errorf("error rendering markdown: %w", err)
@@ -423,6 +416,18 @@ func glamourRender(m pagerModel, markdown string) (string, error) {
 	}
 
 	return content.String(), nil
+}
+
+func renderOnce(options []glamour.TermRendererOption, md string) (string, error) {
+	r, err := glamour.NewTermRenderer(options...)
+	if err != nil {
+		return "", fmt.Errorf("error creating glamour renderer: %w", err)
+	}
+	out, err := r.Render(md)
+	if err != nil {
+		return "", fmt.Errorf("glamour render: %w", err)
+	}
+	return out, nil
 }
 
 func (m *pagerModel) initWatcher() {

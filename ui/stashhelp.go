@@ -146,7 +146,7 @@ func (m stashModel) helpView() (string, int) {
 		switch m.sortMode {
 		case sortByModified:
 			appHelp = append(appHelp, "s", "sort: modified")
-		default:
+		case sortByName:
 			appHelp = append(appHelp, "s", "sort: name")
 		}
 	}

@@ -37,7 +37,7 @@ func sortMarkdowns(mds []*markdown, mode sortMode) {
 			// Descending: newer modtimes come first.
 			return b.Modtime.Compare(a.Modtime)
 		})
-	default:
+	case sortByName:
 		slices.SortStableFunc(mds, func(a, b *markdown) int {
 			return cmp.Compare(a.Note, b.Note)
 		})
