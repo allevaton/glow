@@ -42,10 +42,10 @@ func TestGlowFlags(t *testing.T) {
 
 func TestValidateStyle(t *testing.T) {
 	tt := []struct {
-		name       string
-		in         string
-		wantStyle  string
-		wantErr    bool
+		name      string
+		in        string
+		wantStyle string
+		wantErr   bool
 	}{
 		{name: "auto passes through", in: "auto", wantStyle: "auto"},
 		{name: "named built-in passes through", in: "dark", wantStyle: "dark"},
