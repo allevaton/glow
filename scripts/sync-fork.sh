@@ -2,7 +2,7 @@
 
 # Syncs this fork with upstream:
 #   1. Fetch upstream
-#   2. Fast-forward $main_branch to upstream/$main_branch (bails if it has diverged)
+#   2. Fast-forward $main_branch to upstream/$upstream_branch (bails if it has diverged)
 #   3. Push $main_branch to origin
 #   4. Rebase the current branch onto $main_branch
 #
@@ -12,6 +12,8 @@
 set -e
 
 main_branch="master"
+# Upstream renamed master to main; --prune below makes the next rename fail loudly.
+upstream_branch="main"
 
 current_branch=$(git rev-parse --abbrev-ref HEAD)
 
@@ -26,11 +28,11 @@ if ! git diff-index --quiet HEAD --; then
 fi
 
 echo "==> Fetching upstream"
-git fetch upstream
+git fetch --prune upstream
 
-echo "==> Fast-forwarding $main_branch to upstream/$main_branch"
+echo "==> Fast-forwarding $main_branch to upstream/$upstream_branch"
 git checkout "$main_branch"
-git merge --ff-only "upstream/$main_branch"
+git merge --ff-only "upstream/$upstream_branch"
 
 echo "==> Pushing $main_branch to origin"
 git push origin "$main_branch"
