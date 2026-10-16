@@ -11,9 +11,9 @@ func stubFactory(path string) *markdown {
 
 // newTestStash returns a stashModel wired up enough for applyRescan tests.
 func newTestStash() stashModel {
-	initSections()
 	m := newStashModel(&commonModel{
-		cfg: Config{},
+		cfg:    Config{},
+		styles: newStyles(true),
 	})
 	m.common.width = 80
 	m.common.height = 40
