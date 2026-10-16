@@ -2,8 +2,6 @@ package main
 
 import (
 	"testing"
-
-	"github.com/charmbracelet/glamour/styles"
 )
 
 func TestGlowFlags(t *testing.T) {
@@ -51,7 +49,7 @@ func TestValidateStyle(t *testing.T) {
 	}{
 		{name: "auto passes through", in: "auto", wantStyle: "auto"},
 		{name: "named built-in passes through", in: "dark", wantStyle: "dark"},
-		{name: "missing style file falls back to auto", in: "/nonexistent/path/to/style.json", wantStyle: styles.AutoStyle},
+		{name: "missing style file falls back to auto", in: "/nonexistent/path/to/style.json", wantStyle: "auto"},
 	}
 
 	for _, tc := range tt {

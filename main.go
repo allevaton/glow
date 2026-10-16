@@ -159,8 +159,8 @@ func validateStyle(style string) (string, error) {
 	expanded := utils.ExpandPath(style)
 	_, err := os.Stat(expanded)
 	if errors.Is(err, fs.ErrNotExist) {
-		fmt.Fprintf(os.Stderr, "specified style does not exist: %s; falling back to %q\n", expanded, styles.AutoStyle)
-		return styles.AutoStyle, nil
+		fmt.Fprintf(os.Stderr, "specified style does not exist: %s; falling back to %q\n", expanded, "auto")
+		return "auto", nil
 	}
 	if err != nil {
 		return style, fmt.Errorf("unable to stat file: %w", err)
